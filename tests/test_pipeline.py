@@ -23,7 +23,7 @@ from relevance_bench.reporting.checkpoints import report_checkpoint
 from relevance_bench.rubric import CRITERIA, INSTRUCTIONS
 
 
-@pytest.mark.parametrize("method", ["jev", "openai", "openai-decisions"])
+@pytest.mark.parametrize("method", list(PROVIDERS))
 def test_cli_run_report_and_resume(
     method, monkeypatch, tables, run_paths, tmp_path, fake_providers
 ):
@@ -257,6 +257,7 @@ def test_context_failure_at_one_character(monkeypatch, tmp_path, tables):
         ["run", "--method", "openai-decisions", "--reasoning-effort", "none"],
         ["run", "--method", "openai-decisions", "--model", "unknown"],
         ["run", "--method", "openai", "--reasoning-effort", "unknown"],
+        ["run", "--method", "openrouter", "--reasoning-effort", "none"],
     ],
 )
 def test_cli_validation_before_network(arguments, monkeypatch):
@@ -286,3 +287,158 @@ def test_incomplete_and_duplicate_report(tmp_path, tables):
     path.write_text((json.dumps(row) + "\n") * 2)
     with pytest.raises(ValueError, match="Duplicate judgment"):
         report_checkpoint(tmp_path, tables["qrels"], DEFAULT_DATASET, "jev")
+
+
+def test_openrouter_failure_resume_and_policy_mismatch(
+    tmp_path, tables, responses, fake_providers
+):
+    response = responses["openrouter"]
+    probabilities = response.answers["relevance"].probabilities
+    response.answers["relevance"].probabilities = None
+    kwargs = {
+        "output_dir": tmp_path,
+        "config": provider_config("openrouter"),
+        "concurrency": 1,
+        "method": "openrouter",
+    }
+    with pytest.raises(RuntimeError, match="2 judgments failed"):
+        asyncio.run(cli.judge_async(**tables, **kwargs))
+    failures = json.loads((tmp_path / "failures.json").read_text())
+    assert len(failures) == 2
+    assert all(
+        f["type"] == "ProviderResponseError"
+        and f["details"]["request_id"] == "openrouter-request"
+        for f in failures
+    )
+    response.answers["relevance"].probabilities = probabilities
+    assert len(asyncio.run(cli.judge_async(**tables, **kwargs))) == 2
+    assert json.loads((tmp_path / "failures.json").read_text()) == []
+    asyncio.run(cli.judge_async(**tables, **kwargs))
+    assert len(fake_providers) == 2
+    metadata = json.loads((tmp_path / "experiment.json").read_text())
+    assert metadata["api"] == "openrouter_alpha_decisions"
+    assert metadata["question_type"] == "score" and metadata["criteria"] == CRITERIA
+    config = PROVIDERS["openrouter"].provider_type.configuration(kwargs["config"])
+    checkpoint_kwargs = {
+        "dataset": DEFAULT_DATASET,
+        "method": "openrouter",
+        "model": kwargs["config"].model_name,
+        "inputs": [
+            ("q1", p["passage_id"], "query", p["text"]) for p in tables["passages"]
+        ],
+        "pairs": [(r["query_id"], r["passage_id"]) for r in tables["qrels"]],
+        "concurrency": 1,
+    }
+    for field in (
+        "api",
+        "input_format",
+        "question_type",
+        "decision",
+        "probability_normalization",
+    ):
+        with pytest.raises(ValueError, match="Cached experiment differs"):
+            prepare_checkpoint(
+                tmp_path,
+                configuration={**config, field: "changed"},
+                **checkpoint_kwargs,
+            )
+
+
+@pytest.mark.parametrize("method", ["jev", "openrouter"])
+def test_provider_context_reduction(
+    method, monkeypatch, tmp_path, tables, fake_providers, responses
+):
+    from conftest import make_provider
+
+    provider, request = make_provider(
+        method, provider_config(method), responses[method]
+    )
+    if method == "openrouter":
+        import httpx
+        from openrouter.errors import OpenRouterError
+
+        error = OpenRouterError("too large", httpx.Response(413, text="too large"))
+    else:
+        error = ContextLimitError("too large")
+    request.side_effect = [error, responses[method], responses[method]]
+
+    @asynccontextmanager
+    async def factory(method, config):
+        yield provider
+
+    monkeypatch.setattr(cli, "open_provider", factory)
+    asyncio.run(
+        cli.judge_async(
+            **tables,
+            output_dir=tmp_path,
+            config=provider_config(method),
+            concurrency=1,
+            method=method,
+        )
+    )
+    rows = read_jsonl(tmp_path / "judgments.jsonl")
+    assert rows[0]["length_retries"] == 1 and rows[0]["passage_used_chars"] == 6
+    assert request.await_count == 3
+
+
+def test_all_providers_in_comparison(
+    monkeypatch, tables, run_paths, tmp_path, fake_providers
+):
+    monkeypatch.setattr(DatasetSpec, "load", lambda self, table: tables[table])
+    runner = CliRunner()
+    for method in PROVIDERS:
+        result = runner.invoke(
+            cli.app,
+            [
+                "run",
+                "--method",
+                method,
+                "--data-dir",
+                str(tmp_path),
+                "--local-runs",
+                "--bootstrap-resamples",
+                "0",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+    monkeypatch.setattr(
+        cli,
+        "open_provider",
+        lambda *a, **k: pytest.fail("Comparison must not initialize clients"),
+    )
+    result = runner.invoke(cli.app, ["compare", "--data-dir", str(tmp_path)])
+    assert result.exit_code == 0, result.output
+    assert "| openrouter | microsoft/microsoft-decision-1 |" in result.stdout
+    assert "| openai-decisions | gpt-6-luna |" in result.stdout
+
+
+def test_openrouter_model_override_unknown_cost(
+    monkeypatch, tables, run_paths, tmp_path, fake_providers
+):
+    monkeypatch.setattr(DatasetSpec, "load", lambda self, table: tables[table])
+    args = [
+        "--method",
+        "openrouter",
+        "--data-dir",
+        str(tmp_path),
+        "--local-runs",
+        "--bootstrap-resamples",
+        "0",
+    ]
+    runner = CliRunner()
+    result = runner.invoke(cli.app, ["run", *args, "--model", "custom/model"])
+    assert result.exit_code == 0, result.output
+    assert fake_providers[0][1].call_args.kwargs["model"] == "custom/model"
+    report = json.loads((tmp_path / "openrouter" / "results.json").read_text())
+    assert report["cost"]["total"] is None
+    result = runner.invoke(cli.app, ["run", *args])
+    assert result.exit_code != 0 and "Cached experiment differs" in str(
+        result.exception
+    )
+    assert len(fake_providers) == 1
+    monkeypatch.setattr(
+        cli,
+        "open_provider",
+        lambda *a, **k: pytest.fail("Report must not initialize a client"),
+    )
+    assert runner.invoke(cli.app, ["report", *args]).exit_code == 0

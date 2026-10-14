@@ -176,7 +176,7 @@ def run(
     method: Annotated[
         Method,
         typer.Option(
-            help="Judgment provider: jev, OpenAI Responses (openai), or OpenAI Decisions."
+            help="Judgment provider: jev, OpenAI Responses (openai), OpenAI Decisions, or OpenRouter Decisions Alpha."
         ),
     ] = Method.jev,
     model: Annotated[
@@ -185,7 +185,8 @@ def run(
             help=(
                 "Override the provider's model. Defaults to "
                 f"{PROVIDERS['jev'].default_model} for jev and "
-                f"{PROVIDERS['openai'].default_model} for OpenAI methods."
+                f"{PROVIDERS['openai'].default_model} for OpenAI methods, and "
+                f"{PROVIDERS['openrouter'].default_model} for OpenRouter."
             )
         ),
     ] = None,

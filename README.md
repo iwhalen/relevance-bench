@@ -4,6 +4,29 @@ This is a small benchmark of the TREC DL 2023 judged passages.
 
 Judges are given `(query, passage)` pairs and expected to output a judgment in `{0, 1, 2, 3}`.
 
+## Results
+
+### Agreement
+
+| Provider | Model | Judgment coverage | nDCG@10 tau-b | Tau CI (95%) | Pooled Cohen’s kappa | Kappa CI (95%) |
+| --- | --- | --- | --- | --- | --- | --- |
+| jev | jev-latest | 22327/22327 | 0.9352 | [0.8545, 0.9453] | 0.1907 | [0.1539, 0.2279] |
+| openrouter | microsoft/microsoft-decision-1 | partial (22256/22327) | 0.9429 | [0.8780, 0.9529] | **0.2696** | [0.2275, 0.3106] |
+| openai | gpt-6-luna | 22327/22327 | 0.9328 | [0.8655, 0.9496] | 0.2391 | [0.2000, 0.2767] |
+| openai-decisions | gpt-6-luna | partial (22324/22327) | 0.9294 | [0.8622, 0.9462] | 0.1775 | [0.1427, 0.2124] |
+| openrouter | perplexity/pplx-decider-v1.1-27b | partial (22320/22327) | **0.9453** | [0.8780, 0.9554] | 0.2419 | [0.2015, 0.2825] |
+
+### Efficiency
+
+| Provider | Model | Judgment coverage | Estimated total cost (USD) | P50 latency (seconds) |
+| --- | --- | --- | --- | --- |
+| jev | jev-latest | 22327/22327 | 0.678263 | **0.1357** |
+| openrouter | microsoft/microsoft-decision-1 | partial (22256/22327) | 0.338348 | 0.2578 |
+| openai | gpt-6-luna | 22327/22327 | 1.328348 | 1.7142 |
+| openai-decisions | gpt-6-luna | partial (22324/22327) | 1.236627 | 0.1578 |
+| openrouter | perplexity/pplx-decider-v1.1-27b | partial (22320/22327) | **0.246585** | 0.2602 |
+
+
 ## Quick start
 
 First, clone the repository.
@@ -15,7 +38,7 @@ cd relevance-bench
 
 Then install [uv](https://docs.astral.sh/uv/).
 
-Set `TYPESAFE_API_KEY` in `.env` for Jev, or `OPENAI_API_KEY` for OpenAI methods.
+Set `TYPESAFE_API_KEY` in `.env` for Jev, `OPENAI_API_KEY` for OpenAI methods, or `OPENROUTER_API_KEY` for OpenRouter.
 
 Then run:
 
@@ -30,6 +53,7 @@ Methods can be changed with the `--method` flag. Available choices are:
 - `jev`: generate judgments with Jev through the TypeSafe API.
 - `openai`: generate judgments using structured outputs and the Responses API.
 - `openai-decisions`: generate judgments with the [OpenAI Decisions API](https://developers.openai.com/api/docs/guides/decisions).
+- `openrouter`: generate judgments with the [OpenRouter Decisions Alpha API](https://openrouter.ai/docs/client-sdks/python/sdks/decisions/README).
 
 ## CLI docs
 

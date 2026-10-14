@@ -9,13 +9,14 @@ from relevance_bench.providers.openai import (
     OpenAIDecisionsProvider,
     OpenAIResponsesProvider,
 )
+from relevance_bench.providers.openrouter import OpenRouterDecisionsProvider
 from relevance_bench.providers.typesafe import TypeSafeProvider
 from relevance_bench.rubric import RelevanceJudgment
 
 
 @pytest.fixture(autouse=True)
 def no_credentials(monkeypatch):
-    for name in ("OPENAI_API_KEY", "TYPESAFE_API_KEY"):
+    for name in ("OPENAI_API_KEY", "TYPESAFE_API_KEY", "OPENROUTER_API_KEY"):
         monkeypatch.delenv(name, raising=False)
 
 
@@ -82,6 +83,19 @@ def responses():
             model="gpt-6-luna",
             _request_id="decisions-request",
         ),
+        "openrouter": SimpleNamespace(
+            answers={
+                "relevance": SimpleNamespace(
+                    type="score",
+                    score=1.5,
+                    confidence=0.8,
+                    probabilities={str(k): v for k, v in probabilities.items()},
+                )
+            },
+            usage=usage,
+            model="microsoft/microsoft-decision-1",
+            id="openrouter-request",
+        ),
     }
 
 
@@ -92,6 +106,13 @@ def make_provider(method, config, response):
     elif method == "openai":
         provider = OpenAIResponsesProvider(
             config, SimpleNamespace(responses=SimpleNamespace(parse=request))
+        )
+    elif method == "openrouter":
+        provider = OpenRouterDecisionsProvider(
+            config,
+            SimpleNamespace(
+                alpha=SimpleNamespace(decisions=SimpleNamespace(create_async=request))
+            ),
         )
     else:
         provider = OpenAIDecisionsProvider(

@@ -310,11 +310,11 @@ def test_cli_offline_values_and_all_artifacts(saved_report, tmp_path, monkeypatc
     assert "Comparison saved in" in result.stderr
     assert "Comparison saved in" not in result.stdout
     assert (
-        "| custom-method | saved-model | partial (2/3) | 0.1235 | [-0.1235, 0.4568] | -0.2346 | [-0.4568, 0.1235] |"
+        "| custom-method | saved-model | partial (2/3) | **0.1235** | [-0.1235, 0.4568] | **-0.2346** | [-0.4568, 0.1235] |"
         in result.stdout
     )
     assert (
-        "| custom-method | saved-model | 2/2 | 0.123457 | 2.0000 |"
+        "| custom-method | saved-model | 2/2 | **0.123457** | **2.0000** |"
         in result.stdout
     )
     assert result.stdout.count("| Provider | Model | Judgment coverage |") == 2
@@ -334,6 +334,27 @@ def test_cli_offline_values_and_all_artifacts(saved_report, tmp_path, monkeypatc
             assert f"]({name})" in result.stdout
     assert {p.name for p in output.iterdir()} == expected
     assert all(path.read_bytes() == content for path, content in original.items())
+
+
+def test_best_values_use_unrounded_estimates_and_retain_ties(saved_report, tmp_path):
+    for folder, tau, kappa, cost, latency in (
+        ("a", 0.123441, -0.1, 0, 2),
+        ("b", 0.123449, -0.2, 1, 0),
+        ("c", 0.123449, -0.2, 0, 0),
+    ):
+        report = saved_report(folder)
+        report["method"] = folder
+        report["system_rank_correlations"]["nDCG@10"]["tau_b"] = tau
+        report["agreement"]["cohen_kappa"] = kappa
+        report["cost"]["total"] = cost
+        saved_report(folder, report=report, durations=(latency, latency))
+    markdown = compare_reports(tmp_path)
+    assert "| a | saved-model | 2/2 | 0.1234 | [-0.1235, 0.4568] | **-0.1000** |" in markdown
+    for folder in ("b", "c"):
+        assert f"| {folder} | saved-model | 2/2 | **0.1234** | [-0.1235, 0.4568] | -0.2000 |" in markdown
+    assert "| a | saved-model | 2/2 | **0.000000** | 2.0000 |" in markdown
+    assert "| b | saved-model | 2/2 | 1.000000 | **0.0000** |" in markdown
+    assert "| c | saved-model | 2/2 | **0.000000** | **0.0000** |" in markdown
 
 
 def test_unavailable_and_incomplete_values(saved_report, tmp_path):
@@ -357,8 +378,9 @@ def test_unavailable_and_incomplete_values(saved_report, tmp_path):
     }
     saved_report("unknown", report=unknown)
     markdown = compare_reports(tmp_path)
-    assert "0.123457 (incomplete)" in markdown
+    assert "**0.123457** (incomplete)" in markdown
     assert "N/A (incomplete)" in markdown
+    assert "**N/A**" not in markdown
     assert "| Kappa CI (90%) |" in markdown
     assert "N/A (90%)" not in markdown
     assert "Too few queries" in markdown

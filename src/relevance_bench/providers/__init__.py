@@ -1,5 +1,6 @@
 """Provider registry, pricing estimates, and managed client construction."""
 
+import os
 from collections.abc import Callable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field, fields
@@ -7,6 +8,7 @@ from enum import Enum
 from typing import Any
 
 from openai import AsyncOpenAI
+from openrouter import OpenRouter
 from typesafe_sdk import AsyncTypeSafeClient, RetryPolicy
 
 from .base import BaseProvider, ProviderConfig
@@ -16,6 +18,7 @@ from .openai import (
     OpenAIResponsesConfig,
     OpenAIResponsesProvider,
 )
+from .openrouter import OpenRouterDecisionsProvider
 from .typesafe import TypeSafeProvider
 
 
@@ -56,6 +59,19 @@ PROVIDERS = {
         lambda config: AsyncOpenAI(max_retries=0),
         {"gpt-6-luna": (0.1, 0.0)},
         ("gpt-6-luna",),
+    ),
+    "openrouter": ProviderSpec(
+        OpenRouterDecisionsProvider,
+        ProviderConfig,
+        "microsoft/microsoft-decision-1",
+        lambda config: OpenRouter(
+            api_key=os.environ["OPENROUTER_API_KEY"],
+            retry_config=None,
+        ),
+        {
+            "microsoft/microsoft-decision-1": (0.042, 0.0),
+            "perplexity/pplx-decider-v1.1-27b": (0.02, 0),
+        },
     ),
 }
 Method = Enum("Method", {key: key for key in PROVIDERS}, type=str)

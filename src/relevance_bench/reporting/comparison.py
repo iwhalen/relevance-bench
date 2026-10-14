@@ -309,7 +309,7 @@ def _plot(
             eligible.append((experiment, x, y))
     front = pareto_indices([(x, y) for _, x, y in eligible])
     ylabel = "nDCG@10 Kendall tau-b" if y_metric == "tau" else "Pooled Cohen’s kappa"
-    xlabel = "Estimated total cost (USD)" if x_metric == "cost" else "p50 latency (s)"
+    xlabel = "Estimated total cost (USD)" if x_metric == "cost" else "P50 latency (s)"
     with plt.style.context("dark_background"):
         fig, ax = plt.subplots(figsize=(10, 7))
         for i, (experiment, x, y) in enumerate(eligible):
@@ -376,8 +376,13 @@ def _cell(value) -> str:
     )
 
 
-def _format(value: float | None, places: int = 4) -> str:
-    return "N/A" if value is None else f"{value:.{places}f}"
+def _format(
+    value: float | None, places: int = 4, *, best: float | None = None
+) -> str:
+    if value is None:
+        return "N/A"
+    formatted = f"{value:.{places}f}"
+    return f"**{formatted}**" if value == best else formatted
 
 
 def _table(headers: list[str], rows: list[list[str]]) -> str:
@@ -393,6 +398,14 @@ def compare_reports(data_dir: Path, output_dir: Path | None = None) -> str:
     experiments = discover_experiments(data_dir, output_dir=output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     agreement_rows, efficiency_rows = [], []
+    best = {}
+    for metric, select in (("tau", max), ("kappa", max), ("cost", min), ("latency", min)):
+        values = [
+            value
+            for experiment in experiments
+            if (value := getattr(experiment, metric)) is not None
+        ]
+        best[metric] = select(values, default=None)
     ci_headers = []
     confidence_notes = []
     for metric, label in (("tau", "Tau"), ("kappa", "Kappa")):
@@ -420,16 +433,18 @@ def compare_reports(data_dir: Path, output_dir: Path | None = None) -> str:
         agreement_rows.append(
             identity
             + [
-                _format(experiment.tau),
+                _format(experiment.tau, best=best["tau"]),
                 experiment.tau_ci,
-                _format(experiment.kappa),
+                _format(experiment.kappa, best=best["kappa"]),
                 experiment.kappa_ci,
             ]
         )
-        cost = _format(experiment.cost, 6) + (
+        cost = _format(experiment.cost, 6, best=best["cost"]) + (
             " (incomplete)" if not experiment.cost_complete else ""
         )
-        efficiency_rows.append(identity + [cost, _format(experiment.latency)])
+        efficiency_rows.append(
+            identity + [cost, _format(experiment.latency, best=best["latency"])]
+        )
     sections = [
         "# Saved experiment comparison",
         "## Agreement",

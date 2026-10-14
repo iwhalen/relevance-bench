@@ -33,7 +33,7 @@ from relevance_bench.providers.openai import OpenAIDecisionsProvider
 from relevance_bench.rubric import CRITERIA, INSTRUCTIONS, RelevanceJudgment
 
 
-@pytest.mark.parametrize("method", ["jev", "openai", "openai-decisions"])
+@pytest.mark.parametrize("method", list(PROVIDERS))
 def test_provider_payload_and_result(method, responses):
     provider, request = make_provider(
         method, provider_config(method), responses[method]
@@ -46,6 +46,22 @@ def test_provider_payload_and_result(method, responses):
     if method == "jev":
         assert payload["state"] == {"query": "query", "passage": "passage"}
         assert payload["questions"]["relevance"].criteria == CRITERIA
+    elif method == "openrouter":
+        assert payload == {
+            "model": "microsoft/microsoft-decision-1",
+            "state": {"query": "query", "passage": "passage"},
+            "questions": {
+                "relevance": {
+                    "type": "score",
+                    "instructions": INSTRUCTIONS,
+                    "criteria": CRITERIA,
+                }
+            },
+        }
+        assert judgment.model == payload["model"]
+        assert judgment.request_id == "openrouter-request"
+        assert judgment.score == 1.5 and judgment.confidence == 0.8
+        assert judgment.checkpoint_fields()["probabilities"]["1"] == 0.4
     else:
         assert payload["model"] == "gpt-6-luna"
         assert payload["input"] == '{"query": "query", "passage": "passage"}'
@@ -64,7 +80,7 @@ def test_provider_payload_and_result(method, responses):
             assert judgment.checkpoint_fields()["probabilities"]["1"] == 0.4
 
 
-@pytest.mark.parametrize("method", ["jev", "openai", "openai-decisions"])
+@pytest.mark.parametrize("method", list(PROVIDERS))
 def test_missing_usage_is_unknown(method, responses):
     responses[method].usage = None
     provider, _ = make_provider(method, provider_config(method), responses[method])
@@ -294,10 +310,21 @@ def test_prices_and_sdk_retries_disabled(monkeypatch):
     monkeypatch.setattr(
         providers, "AsyncTypeSafeClient", lambda **kwargs: captured.append(kwargs)
     )
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    monkeypatch.setattr(
+        providers, "OpenRouter", lambda **kwargs: captured.append(kwargs)
+    )
     for method in PROVIDERS:
         PROVIDERS[method].client_factory(provider_config(method))
     assert captured[0]["retry"].max_retries == 0
     assert captured[1]["max_retries"] == captured[2]["max_retries"] == 0
+    assert captured[3] == {"api_key": "test-key", "retry_config": None}
+    assert token_prices("openrouter", "microsoft/microsoft-decision-1") == {
+        "input": 0.042,
+        "output": 0.0,
+    }
+    assert token_prices("openrouter", "unknown") is None
+    assert provider_config("openrouter", "unknown").model_name == "unknown"
     assert token_prices("openai", "gpt-6-luna")["output"] == 0.5
     assert token_prices("openai-decisions", "gpt-6-luna")["output"] == 0
     assert token_prices("openai", "unknown") is None
