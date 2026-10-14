@@ -1,16 +1,36 @@
 [project]
-name = "jev-pseudo-relevance"
-version = "0.1.0"
-description = "Add your description here"
+name = "relevance-bench"
+version = "0.0.1"
+description = "A benchmark for pseudo relevance generation."
 readme = "README.md"
-requires-python = ">=3.14"
+authors = [
+    { name = "iwhalen", email = "ianpatrickwhalen@gmail.com" }
+]
+requires-python = ">=3.13"
 dependencies = [
     "datasets>=5.0.1",
     "ir-measures>=0.4.3",
     "matplotlib>=3.11.2",
-    "openai>=3.24.0",
+    "numpy>=2.4.0",
+    "openai>=3.26.0",
     "pydantic>=2.13.5",
     "scipy>=1.18.1",
     "tqdm>=4.70.1",
+    "tenacity>=9.1.4",
+    "threadpoolctl>=3.6.0",
+    "typer>=0.27.3",
     "typesafe-sdk>=0.7.2",
 ]
+
+[build-system]
+requires = ["uv_build>=0.9.17,<0.10.0"]
+build-backend = "uv_build"
+
+[project.scripts]
+relevance-bench = "relevance_bench.__main__:main"
+
+[dependency-groups]
+dev = ["pytest>=8.0"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

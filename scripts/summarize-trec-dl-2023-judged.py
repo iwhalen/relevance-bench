@@ -38,7 +38,9 @@ def summarize(queries, passages, qrels):
         "number_of_passages": len(passages),
         "number_of_judgments": len(qrels),
         "query_length_words": {
-            "average": mean(lengths), "minimum": min(lengths), "maximum": max(lengths),
+            "average": mean(lengths),
+            "minimum": min(lengths),
+            "maximum": max(lengths),
         },
         "average_judged_passages_per_query": mean(per_query[qid] for qid in query_ids),
         "relevance_grades": {
@@ -59,18 +61,28 @@ def main():
     parser.add_argument("--repo-id", default="iwhalen/trec-dl-2023-judged")
     parser.add_argument("--revision", default="main", help="Hub branch, tag, or commit")
     parser.add_argument("--cache-dir", help="Hugging Face dataset download cache")
-    parser.add_argument("--json", action="store_true", help="Print machine-readable JSON")
+    parser.add_argument(
+        "--json", action="store_true", help="Print machine-readable JSON"
+    )
     args = parser.parse_args()
     revision = HfApi().dataset_info(args.repo_id, revision=args.revision).sha
     tables = {
         name: load_dataset(
-            args.repo_id, name, split="test", revision=revision, cache_dir=args.cache_dir,
+            args.repo_id,
+            name,
+            split="test",
+            revision=revision,
+            cache_dir=args.cache_dir,
         )
         for name in ("queries", "passages", "qrels")
     }
     stats = summarize(**tables)
     if args.json:
-        print(json.dumps({"repo_id": args.repo_id, "revision": revision, **stats}, indent=2))
+        print(
+            json.dumps(
+                {"repo_id": args.repo_id, "revision": revision, **stats}, indent=2
+            )
+        )
         return
     print(f"Dataset: {args.repo_id} (revision {revision})")
     print(f"Number of queries: {stats['number_of_queries']:,}")
@@ -80,12 +92,18 @@ def main():
     print(f"Average query length (words): {lengths['average']:.2f}")
     print(f"Minimum query length (words): {lengths['minimum']}")
     print(f"Maximum query length (words): {lengths['maximum']}")
-    print(f"Average judged passages per query: {stats['average_judged_passages_per_query']:.2f}")
+    print(
+        f"Average judged passages per query: {stats['average_judged_passages_per_query']:.2f}"
+    )
     print("\nRelevance grade | Judgments | Average judged passages per query")
     for grade, values in stats["relevance_grades"].items():
-        print(f"{grade:>15} | {values['number_of_judgments']:>9,} | "
-              f"{values['average_judged_passages_per_query']:.2f}")
-    print("\nWords are whitespace-separated. Grade averages include all queries, including zeros.")
+        print(
+            f"{grade:>15} | {values['number_of_judgments']:>9,} | "
+            f"{values['average_judged_passages_per_query']:.2f}"
+        )
+    print(
+        "\nWords are whitespace-separated. Grade averages include all queries, including zeros."
+    )
     print("Documents here are judged passages, not unique parent documents.")
 
 
