@@ -63,7 +63,7 @@ Compare saved reports without credentials or network access:
 uv run relevance-bench compare --data-dir data
 ```
 
-Reports must use the same dataset, evaluation settings, and retrieval runs. Tables and plots are saved to `data/comparison`; use `--output-dir` to change this.
+Reports must use the same dataset, evaluation settings, and retrieval runs. Tables and plots are saved to `data/comparison`. Use `--output-dir` to change this.
 
 ### `download-runs`
 
