@@ -10,6 +10,7 @@ First, clone the repository.
 
 ```bash
 git clone https://github.com/iwhalen/relevance-bench.git
+cd relevance-bench
 ```
 
 Then install [uv](https://docs.astral.sh/uv/).
@@ -26,73 +27,53 @@ By default, this will output results for Jev to `data/jev`.
 
 Methods can be changed with the `--method` flag. Available choices are:
 
-- `jev`: generated judgments with Jev through the TypeSafe API.
+- `jev`: generate judgments with Jev through the TypeSafe API.
 - `openai`: generate judgments using structured outputs and the Responses API.
 - `openai-decisions`: generate judgments with the [OpenAI Decisions API](https://developers.openai.com/api/docs/guides/decisions).
 
 ## CLI docs
 
-See here for more detailed CLI documentation.
-
-The CLI is a Typer application, so using the `--help` flag will always be a good way to get the best information on command.
+Use `--help` on any command to see its options.
 
 ### `run`
 
+Generate judgments and reports:
+
+```bash
+uv run --env-file .env relevance-bench run --method openai
+```
+
+Results are saved to `data/<method>`. Rerun with the same arguments to resume an interrupted run.
+
 ### `report`
+
+Regenerate reports from saved judgments. No API key is needed.
+
+```bash
+uv run relevance-bench report --method openai
+```
+
+Use `--allow-partial` to report an incomplete run. These reports are saved to `data/<method>/partial`.
 
 ### `compare`
 
-### `download-runs`
-
-Compare all saved experiments in a data directory without credentials or network access:
+Compare saved reports without credentials or network access:
 
 ```bash
 uv run relevance-bench compare --data-dir data
-uv run relevance-bench compare --data-dir data --output-dir comparisons/latest
 ```
 
-The command discovers experiment folders immediately inside `--data-dir` (default
-`data`), including custom folder names and multiple experiments using the same
-method. It reads `results.json`, falling back to `partial/results.json`, and skips
-folders without reports with a message on stderr. It never generates reports or
-downloads datasets or retrieval runs. Reports must share the same dataset,
-evaluation settings, and retrieval-run manifest.
+Reports must use the same dataset, evaluation settings, and retrieval runs. Tables and plots are saved to `data/comparison`; use `--output-dir` to change this.
 
-Two Markdown tables are printed to stdout and saved as `comparison.md` in
-`<data-dir>/comparison` unless `--output-dir` is supplied. Progress and errors go
-to stderr. The same folder contains four PNGs, linked from the Markdown:
-`pareto_tau_cost.png`, `pareto_tau_latency.png`, `pareto_kappa_cost.png`, and
-`pareto_kappa_latency.png`. These compare saved nDCG@10 Kendall tau-b and pooled
-Cohen’s kappa against cost and p50 latency. Confidence levels and intervals
-are copied from the reports. Pareto frontiers use unrounded point estimates,
-minimize cost/latency, maximize agreement, and retain tied experiments.
+### `download-runs`
 
-P50 latency is the median of successful judgments’ `latency_seconds`
-in the experiment’s `judgments.jsonl`, including retries within each recorded
-duration. Provider `time_taken` is never substituted. Missing or invalid durations
-make latency `N/A`; a checkpoint/report judgment-count mismatch requires
-regenerating the report. Unavailable values have explanatory notes and are
-excluded from affected plots. A plot with no eligible points explains why it is
-empty.
-
-Partial rows show completed/expected judgment counts and use triangle markers.
-Differing coverage affects comparability, even when experiments have equal
-counts but judged different pairs. Partial reports’ costs cover only successful
-judgments, and all recorded costs exclude failed attempts. Estimates with missing
-usage or pricing are marked incomplete and excluded from cost plots.
-
-
-## Development
+Cache reference retrieval runs in `data/runs`:
 
 ```bash
-uv run pytest
+uv run relevance-bench download-runs
 ```
 
-All reporting code lives in `src/relevance_bench/reporting/`: `reports.py` generates
-and displays reports and plots, `comparison.py` compares saved experiments,
-`metrics.py` calculates agreement and usage, `bootstrap.py` computes confidence
-intervals, and `checkpoints.py` prepares saved checkpoints and summarizes coverage.
-
+The `run` and `report` commands download these automatically. Use `--local-runs` to use cached runs.
 
 ## Build the TREC DL 2023 judged passage dataset
 
